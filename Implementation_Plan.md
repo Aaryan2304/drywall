@@ -47,23 +47,18 @@ Taping: bounding-box annotations only, `segmentation=[]` for all 997 train annot
 
 ### 1.3 Data Split
 
-Split ratio: **70 / 15 / 15** (train / val / test), stratified by dataset origin to ensure both classes are represented in each split.
+Use Roboflow-exported splits as-is. The exports already provide a ~70/15/15 split per dataset, and re-splitting introduces unnecessary merge complexity without meaningful benefit.
+
+`seed=42` is used **only** for augmentation randomness and prompt variant sampling — not for data splitting.
+
 Both datasets: all images are uniform 640×640. Upsample target in inference is fixed — no per-image dynamic resizing required.
-
-```
-seed = 42
-sklearn.model_selection.train_test_split(..., random_state=42, stratify=dataset_label)
-```
-
-Split counts must be logged in the report. Example table format:
 
 | Split | Dataset 1 (Taping) | Dataset 2 (Cracks) | Total |
 |-------|--------------------|--------------------|-------|
-| Train | — | — | — |
-| Val   | — | — | — |
-| Test  | — | — | — |
-
-*Fill in actual counts post-download.*
+| Train | 715 | 3,758 | 4,473 |
+| Val   | 153 | 805 | 958 |
+| Test  | 154 | 806 | 960 |
+| **Total** | **1,022** | **5,369** | **6,391** |
 
 ### 1.4 Augmentation Strategy
 
@@ -169,12 +164,13 @@ loss = BCE(sigmoid(logits), mask) + DiceLoss(sigmoid(logits), mask)
 
 ### 4.3 VRAM Configuration
 
-| Hardware | Batch Size | Grad Accum Steps | Effective Batch | Precision |
-|----------|-----------|-----------------|-----------------|-----------|
-| RTX 3050 Ti (4GB) | 1 | 4 | 4 | FP16 (AMP) |
-| Colab T4 (16GB) | 2 | 2 | 4 | FP16 (AMP) |
+| Hardware | Batch Size | Grad Accum Steps | Effective Batch | Precision | Trainable Components |
+|----------|-----------|-----------------|-----------------|-----------|---------------------|
+| Colab T4 (16GB) | 2 | 2 | 4 | FP16 (AMP) | Decoder + FiLM + projection |
 
 AMP via `torch.cuda.amp.autocast()` + `GradScaler`.
+
+> T4's 16GB VRAM allows unfreezing FiLM conditioning layers (`film_mul`, `film_add`) and the `reduce` projection layer in addition to the decoder. This provides stronger text-to-mask alignment than decoder-only fine-tuning.
 
 ### 4.4 Checkpointing
 
@@ -297,8 +293,7 @@ Document systematic failure modes with visual examples:
 
 | Hardware | Batch | Grad Accum | Precision | Expected Peak VRAM | Notes |
 |----------|-------|-----------|-----------|-------------------|-------|
-| RTX 3050 Ti (4GB) | 1 | 4 | FP16 | ~3.2–3.6 GB | Frozen backbone required; OOM risk at batch=2 |
-| Colab T4 (16GB) | 2 | 2 | FP16 | ~5–6 GB | Comfortable margin; can unfreeze projection layers |
+| Colab T4 (16GB) | 2 | 2 | FP16 | ~5–6 GB | Backbone frozen; decoder + FiLM + projection unfrozen |
 
 > Exact VRAM consumption varies with input resolution and framework version. **Measure and log observed peak values** using `torch.cuda.max_memory_allocated()` — do not report estimates in the final submission.
 
@@ -310,7 +305,7 @@ All choices below must be explicitly documented in the report and README.
 
 | Decision | Choice | Justification |
 |----------|--------|--------------|
-| Train/Val/Test split | 70/15/15, stratified | Balanced representation of both classes |
+| Train/Val/Test split | Roboflow splits as-is | Pre-split by Roboflow (~70/15/15); avoids merge complexity; proportions verified |
 | Loss function | BCE + Dice (equal weight) | BCE for stability; Dice for overlap optimization aligned with eval metrics |
 | Optimizer | AdamW, lr=5e-5 | Standard for fine-tuning transformer decoders |
 | Threshold | Per-prompt, swept on val set over [0.2–0.7] | CLIPSeg logits not calibrated on construction domain |
@@ -321,6 +316,7 @@ All choices below must be explicitly documented in the report and README.
 | Upsample order | Logits → upsample → threshold | Threshold before upsample introduces aliasing artifacts |
 | Taping GT mask source | `cv2.rectangle` from bbox | No polygon segmentation exists in dataset; bbox is geometrically reasonable for linear seams |
 | Empty segmentation handling | Skip 16 cracks annotations | `segmentation=[]`; no valid mask can be generated |
+| Fine-tuning scope | Decoder + FiLM + projection (T4) | T4 VRAM allows full conditioning stack; stronger text-mask alignment |
 
 ---
 
