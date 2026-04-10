@@ -1,6 +1,13 @@
 # Generated masks
 masks/
 
+# Datasets (external, too large for repo)
+cracks/
+taping/
+
+# Non-project files
+assignment.md
+
 # Model outputs
 outputs/
 checkpoints/
