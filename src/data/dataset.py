@@ -74,14 +74,18 @@ class DrywallSegDataset(Dataset):
     def __len__(self) -> int:
         return len(self.samples)
 
+    # Max prompt token length across all variants (including BOS/EOS tokens)
+    # "segment joint/tape" → 6 tokens, "segment drywall seam" → 6 tokens
+    MAX_PROMPT_LEN = 6
+
     def __getitem__(self, idx: int) -> dict[str, torch.Tensor]:
         """Load and preprocess a single sample.
 
         Returns:
             Dict with keys:
                 - pixel_values: (3, 352, 352) float tensor
-                - input_ids: (seq_len,) long tensor
-                - attention_mask: (seq_len,) long tensor
+                - input_ids: (MAX_PROMPT_LEN,) long tensor, zero-padded
+                - attention_mask: (MAX_PROMPT_LEN,) long tensor
                 - mask: (352, 352) float tensor, values {0.0, 1.0}
                 - image_id: str
         """
@@ -112,6 +116,15 @@ class DrywallSegDataset(Dataset):
             return_tensors="pt",
         )
 
+        # Pad input_ids and attention_mask to MAX_PROMPT_LEN
+        input_ids = inputs["input_ids"].squeeze(0)  # (seq_len,)
+        attention_mask = inputs["attention_mask"].squeeze(0)  # (seq_len,)
+
+        pad_len = self.MAX_PROMPT_LEN - input_ids.size(0)
+        if pad_len > 0:
+            input_ids = torch.cat([input_ids, torch.zeros(pad_len, dtype=input_ids.dtype)])
+            attention_mask = torch.cat([attention_mask, torch.zeros(pad_len, dtype=attention_mask.dtype)])
+
         # Resize mask to 352x352 to match CLIPSeg output resolution
         mask_resized = cv2.resize(mask, (352, 352), interpolation=cv2.INTER_NEAREST)
 
@@ -121,8 +134,8 @@ class DrywallSegDataset(Dataset):
 
         return {
             "pixel_values": inputs["pixel_values"].squeeze(0),  # (3, 352, 352)
-            "input_ids": inputs["input_ids"].squeeze(0),  # (seq_len,)
-            "attention_mask": inputs["attention_mask"].squeeze(0),  # (seq_len,)
+            "input_ids": input_ids,  # (MAX_PROMPT_LEN,)
+            "attention_mask": attention_mask,  # (MAX_PROMPT_LEN,)
             "mask": mask_tensor,  # (352, 352)
             "image_id": sample["image_id"],
         }
