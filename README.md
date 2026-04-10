@@ -135,14 +135,18 @@ Conservative parameters chosen — thin cracks degrade under aggressive augmenta
 
 ## Inference & Mask Export
 
+After training, run inference with automatic threshold sweep and mask export:
+
 ```bash
-# Coming in Phase 3
-python infer.py --checkpoint outputs/checkpoints/best.pt --split test
+# Threshold sweep on val set + export test masks
+python infer.py --checkpoint outputs/checkpoints/best.pt
 ```
 
-### Threshold Selection
-
-CLIPSeg logits are uncalibrated on construction imagery. The optimal binarization threshold is determined by sweeping `[0.2, 0.3, 0.4, 0.5, 0.6, 0.7]` on the validation set, separately per prompt class, and selecting the value that maximizes mIoU.
+This will:
+1. Sweep thresholds `[0.2, 0.3, 0.4, 0.5, 0.6, 0.7]` on the validation set (per-prompt)
+2. Test morphological closing (applies only if it improves val mIoU)
+3. Export test set masks with optimal thresholds
+4. Save threshold results to `outputs/predictions/threshold_results.json`
 
 ### Export Specification
 
@@ -155,30 +159,29 @@ CLIPSeg logits are uncalibrated on construction imagery. The optimal binarizatio
 
 ## Evaluation
 
-Metrics computed on held-out test set, per prompt class:
+Compute test-set mIoU + Dice with consistency stratification:
 
-| Metric | Implementation |
-|--------|---------------|
-| mIoU (Jaccard) | `torchmetrics.JaccardIndex(task="binary")` |
-| Dice | `2 * intersection / (pred + gt)` |
+```bash
+# Uses thresholds from infer.py automatically
+python evaluate.py --checkpoint outputs/checkpoints/best.pt
 
-### Consistency Analysis
+# Or override with a fixed threshold
+python evaluate.py --checkpoint outputs/checkpoints/best.pt --threshold 0.4
+```
 
-Performance stratified across image statistics to measure stability:
-
-| Stratum | Proxy | Computation |
-|---------|-------|-------------|
-| Lighting | Mean brightness | `np.mean(grayscale)` |
-| Scene complexity | Edge density | `np.mean(Canny(gray)) / 255` |
-| Defect size | Foreground ratio | `mask.sum() / mask.numel()` |
-
-Each stratum split into Low/Medium/High tertiles. mIoU reported per stratum.
+Outputs:
+- Per-prompt mIoU and Dice
+- Consistency analysis across brightness / edge-density / defect-size strata
+- Results saved to `outputs/eval_results.json`
 
 ## Project Structure
 
 ```
 .
 ├── train.py                    # Training entrypoint
+├── infer.py                    # Inference: threshold sweep + mask export
+├── evaluate.py                 # Evaluation: test metrics + consistency analysis
+├── requirements.txt            # Dependencies
 ├── src/
 │   ├── data/
 │   │   ├── mask_conversion.py  # COCO → binary masks
