@@ -165,7 +165,10 @@ def train(cfg: TrainConfig):
 
     # LR scheduler
     steps_per_epoch = len(train_loader) // cfg.grad_accum_steps
-    total_steps = steps_per_epoch * cfg.epochs
+    if cfg.max_steps is not None:
+        total_steps = cfg.max_steps
+    else:
+        total_steps = steps_per_epoch * cfg.epochs
     scheduler = _warmup_cosine_schedule(optimizer, cfg.warmup_steps, total_steps)
 
     # AMP
@@ -184,11 +187,20 @@ def train(cfg: TrainConfig):
         "lr": "lr", "peak_vram_gb": "peak_vram_gb", "epoch_time_s": "epoch_time_s",
     })
 
-    print(f"\nStarting training: {cfg.epochs} epochs, effective batch={cfg.batch_size * cfg.grad_accum_steps}")
+    if cfg.max_steps is not None:
+        est_epochs = cfg.max_steps / max(steps_per_epoch, 1)
+        print(f"\nStarting training: {cfg.max_steps} steps (~{est_epochs:.1f} epochs), "
+              f"effective batch={cfg.batch_size * cfg.grad_accum_steps}")
+    else:
+        print(f"\nStarting training: {cfg.epochs} epochs, "
+              f"effective batch={cfg.batch_size * cfg.grad_accum_steps}")
     print(f"LR: {cfg.lr}, warmup: {cfg.warmup_steps} steps, cosine decay")
     print()
 
     for epoch in range(1, cfg.epochs + 1):
+        # Check step-based termination before starting new epoch
+        if cfg.max_steps is not None and global_step >= cfg.max_steps:
+            break
         epoch_start = time.time()
         model.train()
 
@@ -199,7 +211,11 @@ def train(cfg: TrainConfig):
 
         optimizer.zero_grad()
 
-        pbar = tqdm(train_loader, desc=f"Epoch {epoch}/{cfg.epochs}", leave=False)
+        if cfg.max_steps is not None:
+            pbar_desc = f"Step {global_step}/{cfg.max_steps}"
+        else:
+            pbar_desc = f"Epoch {epoch}/{cfg.epochs}"
+        pbar = tqdm(train_loader, desc=pbar_desc, leave=False)
         for step, batch in enumerate(pbar, 1):
             pixel_values = batch["pixel_values"].to(device)
             input_ids = batch["input_ids"].to(device)
@@ -245,6 +261,9 @@ def train(cfg: TrainConfig):
                 optimizer.zero_grad()
                 scheduler.step()
                 global_step += 1
+
+                if cfg.max_steps is not None and global_step >= cfg.max_steps:
+                    break
 
             pbar.set_postfix({
                 "loss": f"{loss_dict['loss'].item():.4f}",

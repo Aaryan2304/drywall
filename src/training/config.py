@@ -16,6 +16,7 @@ class TrainConfig:
 
     # Training
     epochs: int = 20
+    max_steps: int | None = None  # Override epochs if set (total optimizer steps)
     patience: int = 5  # Early stopping on val mIoU
     seed: int = 42
 

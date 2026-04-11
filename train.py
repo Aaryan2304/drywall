@@ -21,6 +21,8 @@ from src.training.train import train
 def main():
     parser = argparse.ArgumentParser(description="Train CLIPSeg on drywall segmentation")
     parser.add_argument("--epochs", type=int, default=20)
+    parser.add_argument("--max_steps", type=int, default=None,
+                        help="Total optimizer steps (overrides epochs if set)")
     parser.add_argument("--patience", type=int, default=5)
     parser.add_argument("--batch_size", type=int, default=2)
     parser.add_argument("--grad_accum", type=int, default=2)
@@ -34,6 +36,7 @@ def main():
 
     cfg = TrainConfig(
         epochs=args.epochs,
+        max_steps=args.max_steps,
         patience=args.patience,
         batch_size=args.batch_size,
         grad_accum_steps=args.grad_accum,
