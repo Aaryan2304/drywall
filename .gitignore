@@ -8,6 +8,7 @@ taping/
 # Non-project files
 assignment.md
 HERMES.md
+.worktrees/
 
 # Model outputs
 outputs/
