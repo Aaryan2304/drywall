@@ -197,8 +197,20 @@ Outputs:
 │       └── metrics.py          # mIoU, Dice
 ├── masks/                      # Generated binary masks (gitignored)
 ├── outputs/                    # Checkpoints + logs (gitignored)
-└── Implementation_Plan.md      # Detailed technical plan
+└── report/                     # Report (MD + PDF) and visual examples
 ```
+
+## Results
+
+Test-set performance after 20 epochs of training (best checkpoint at epoch 17):
+
+| Prompt | Threshold | Test mIoU | Test Dice |
+|--------|-----------|-----------|-----------|
+| segment crack | 0.4 | 0.4859 | 0.6338 |
+| segment taping area | 0.4 | 0.5586 | 0.7063 |
+| **Mean** | **0.4** | **0.5222** | **0.6700** |
+
+The model is stable across brightness and edge-density variations. The main consistency weakness is defect size — small/thin cracks score lower (mIoU 0.32) compared to large cracks (mIoU 0.59). See `report/REPORT.md` for full analysis including consistency strata, visual examples, and failure case discussion.
 
 ## Engineering Decisions
 
